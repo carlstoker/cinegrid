@@ -336,5 +336,6 @@ def main():
     if settings['prompt']:
         input('Press Enter to continue.')
 
+
 if __name__ == "__main__":
     main()
