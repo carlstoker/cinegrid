@@ -51,7 +51,7 @@ def add_header(video, settings):
         'montage.png'
     ]
 
-    if settings['command_prefix']:
+    if 'command_prefix' in settings:
         command.insert(0, settings['command_prefix'])
     subprocess.call(command, cwd=settings['temp'])
 
@@ -174,7 +174,7 @@ def make_montage(settings):
     if settings['shadow']:
         command.insert(5, '-shadow')
 
-    if settings['command_prefix']:
+    if 'command_prefix' in settings:
         command.insert(0, settings['command_prefix'])
     subprocess.call(command, cwd=settings['temp'])
 
@@ -195,7 +195,7 @@ def resize_montage(settings):
         'montage.png'
     ]
 
-    if settings['command_prefix']:
+    if 'command_prefix' in settings:
         command.insert(0, settings['command_prefix'])
     subprocess.call(command, cwd=settings['temp'])
 
@@ -207,7 +207,7 @@ def resize_montage(settings):
         'montage.jpg'.format(**settings)
     ]
 
-    if settings['command_prefix']:
+    if 'command_prefix' in settings:
         command.insert(0, settings['command_prefix'])
     subprocess.call(command, cwd=settings['temp'])
     shutil.move('{}/montage.jpg'.format(settings['temp']), settings['montage_filename'])
