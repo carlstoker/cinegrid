@@ -346,6 +346,9 @@ def main():
     settings['output'] = os.path.expanduser(settings['output'])
 
     for filename in settings['FILE']:
+        if os.path.exists(filename) is False:
+            print('File does not exist: {}'.format(filename))
+            continue
         v = Video(filename)
         grid = Cinegrid(v, settings)
         grid.generate()
