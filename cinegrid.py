@@ -8,8 +8,7 @@ import shutil
 import subprocess
 from tempfile import TemporaryDirectory
 
-# Configuration templates
-template = {
+templates = {
     '3x3': {'caps': 9, 'columns': 3},
     'big': {'caps': 100, 'columns': 10},
     'custom': {},
@@ -26,36 +25,184 @@ template = {
 }
 
 
-def add_header(video, settings):
-    print_with_timestamp('Adding header to montage.')
+class Cinegrid:
+    def __init__(self, video, settings):
+        self.video = video
+        self.settings = settings
 
-    t = datetime.datetime(1, 1, 1) + datetime.timedelta(seconds=(video.get_metadata()['duration']))
-    duration_formatted = '{:02}:{:02}:{:02}'.format(t.hour, t.minute, t.second)
+    def get_filename(self):
+        return self.video.get_metadata()['filename']
 
-    label = [
-        'File Name: {basename}{extension}'.format(**settings),
-        'File Size: {filesize_human} ({filesize:,d} bytes)'.format(**video.get_metadata()),
-        'Resolution: {width}x{height} ({aspect_ratio})'.format(**video.get_metadata()),
-        'Duration: {}'.format(duration_formatted)
-    ]
+    def get_basename(self):
+        return os.path.splitext(os.path.basename(self.video.get_metadata()['filename']))[0]
 
-    command = [
-        'convert',
-        'montage.png',
-        '-gravity', 'NorthWest',
-        '-splice', '0x{}'.format(settings['h_fontsize'] * 5),
-        '-pointsize', '{h_fontsize}'.format(**settings),
-        '-annotate', '+5+2', '\n'.join(label),
-        '-append',
-        '-layers', 'merge',
-        'montage.png'
-    ]
+    def get_extension(self):
+        return os.path.splitext(os.path.basename(self.video.get_metadata()['filename']))[1]
 
-    if 'command_prefix' in settings:
-        command.insert(0, settings['command_prefix'])
-    subprocess.call(command, cwd=settings['temp'])
+    def get_montage_filename(self):
+        return '{output}/{basename}-{template}.jpg'.format(**self.settings)
 
-    return None
+    def extract_frames(self):
+        print_with_timestamp(
+            'Generating {caps} frame captures for {filename} from {start} for {duration:.2f} seconds'.format(
+                **self.settings))
+        for i in progressbar.progressbar(range(1, self.settings['caps'] + 1)):
+            # Sets capture time. Increases i by 1 so the first frame isn't always black
+            capture_time = self.settings['start'] + (i * self.settings['interval'])
+
+            t = datetime.datetime(1, 1, 1) + datetime.timedelta(seconds=capture_time)
+            capture_time_formatted = '{:02}:{:02}:{:02}'.format(t.hour, t.minute, t.second).replace(':', '\\\\:')
+
+            filters = ['showinfo']
+            if self.settings['timestamp']:
+                filters.append(
+                    'drawtext=font={}:text={}:fontsize={}:borderw=5:'
+                    'bordercolor=black:fontcolor=white:x=w-tw-10:y=h-th-10 '
+                        .format(self.settings['t_font'], capture_time_formatted, self.settings['t_fontsize']))
+
+            if self.video.get_metadata()['width'] > self.settings['max_frame_width']:
+                filters.append('scale={max_frame_width}:-1'.format(**self.settings))
+
+            filters = ','.join(filters)
+
+            command = [
+                'ffmpeg',
+                '-ss', str(capture_time),
+                '-i', self.settings['filename'],
+                '-y',
+                '-vframes', '1',
+                '-vf', filters,
+                '-loglevel', 'fatal',
+                '{}/img{:05d}.jpg'.format(self.settings['temp'], i)
+            ]
+            subprocess.call(command)
+
+        return None
+
+    def generate(self):
+        self.settings.update({
+            'filename': self.get_filename(),
+            'basename': self.get_basename(),
+            'extension': self.get_extension()
+        })
+        self.settings['montage_filename'] = '{output}/{basename}-{template}.jpg'.format(**self.settings)
+
+        if self.settings['overwrite'] is False and os.path.isfile(self.get_montage_filename()):
+            print_with_timestamp('Cinegrid exists. Skipping {}'.format(self.get_filename()))
+            return False
+
+        if self.settings['start_percent'] is not None and self.settings['start'] is None:
+            self.settings['start'] = self.video.get_metadata()['duration'] * (self.settings['start_percent'] / 100.0)
+        if self.settings['end_percent'] is not None and self.settings['end'] is None:
+            self.settings['end'] = self.video.get_metadata()['duration'] * (self.settings['end_percent'] / 100.0)
+
+        self.settings['duration'] = self.settings['end'] - self.settings['start']
+
+        # Set interval based on duration / number of caps
+        # Otherwise set number of caps based on duration/interval
+        if 'caps' in self.settings:
+            if self.settings['caps'] == 'maximum':
+                self.settings['caps'] = int(
+                    self.settings['max_width'] / (
+                            self.video.get_metadata()['height'] * 200 / self.video.get_metadata()['width'])
+                ) * self.settings['columns']
+            self.settings['interval'] = self.settings['duration'] / self.settings['caps']
+        else:
+            self.settings['caps'] = int(self.settings['duration'] / self.settings['interval'])
+
+        self.settings['rows'] = int(self.settings['caps'] / self.settings['columns'])
+
+        self.settings.update({
+            'max_frame_width': int(self.settings['max_width'] / self.settings['columns'])
+        })
+
+        with TemporaryDirectory() as self.settings['temp']:
+            self.extract_frames()
+            self.make_montage()
+            if self.settings['header']:
+                self.add_header()
+            self.resize_montage()
+            print_with_timestamp('Cinegrid completed. Filename: {}'.format(self.get_montage_filename()))
+
+    def make_montage(self):
+        print_with_timestamp('Generating montage')
+
+        command = [
+            'montage',
+            '-background', '{bgcolor}'.format(**self.settings),
+            '-border', '{border}'.format(**self.settings),
+            '-bordercolor', '{b_color}'.format(**self.settings),
+            '-geometry', '+{spacing}+{spacing}'.format(**self.settings),
+            '-tile', '{columns}x'.format(**self.settings),
+            '*.jpg',
+            'montage.png'
+        ]
+
+        if self.settings['shadow']:
+            command.insert(5, '-shadow')
+
+        if 'command_prefix' in self.settings:
+            command.insert(0, self.settings['command_prefix'])
+        subprocess.call(command, cwd=self.settings['temp'])
+
+        return None
+
+    def add_header(self):
+        print_with_timestamp('Adding header to montage.')
+
+        t = datetime.datetime(1, 1, 1) + datetime.timedelta(seconds=(self.video.get_metadata()['duration']))
+        duration_formatted = '{:02}:{:02}:{:02}'.format(t.hour, t.minute, t.second)
+
+        label = [
+            'File Name: {basename}{extension}'.format(**self.settings),
+            'File Size: {filesize_human} ({filesize:,d} bytes)'.format(**self.video.get_metadata()),
+            'Resolution: {width}x{height} ({aspect_ratio})'.format(**self.video.get_metadata()),
+            'Duration: {}'.format(duration_formatted)
+        ]
+
+        command = [
+            'convert',
+            'montage.png',
+            '-gravity', 'NorthWest',
+            '-splice', '0x{}'.format(self.settings['h_fontsize'] * 5),
+            '-pointsize', '{h_fontsize}'.format(**self.settings),
+            '-annotate', '+5+2', '\n'.join(label),
+            '-append',
+            '-layers', 'merge',
+            'montage.png'
+        ]
+
+        if 'command_prefix' in self.settings:
+            command.insert(0, self.settings['command_prefix'])
+        subprocess.call(command, cwd=self.settings['temp'])
+
+        return None
+
+    def resize_montage(self):
+        print_with_timestamp('Resizing montage to within {max_width}x{max_height}.'.format(**self.settings))
+        command = [
+            'mogrify',
+            '-resize', '{max_width}x{max_height}>'.format(**self.settings),
+            'montage.png'
+        ]
+
+        if 'command_prefix' in self.settings:
+            command.insert(0, self.settings['command_prefix'])
+        subprocess.call(command, cwd=self.settings['temp'])
+
+        print_with_timestamp('Compressing montage to {max_filesize}kb.'.format(**self.settings))
+        command = [
+            'convert',
+            'montage.png',
+            '-define', 'jpeg:extent={max_filesize}kb'.format(**self.settings),
+            'montage.jpg'
+        ]
+
+        if 'command_prefix' in self.settings:
+            command.insert(0, self.settings['command_prefix'])
+        subprocess.call(command, cwd=self.settings['temp'])
+        shutil.move('{}/montage.jpg'.format(self.settings['temp']), self.settings['montage_filename'])
+        return None
 
 
 def aspect_ratio(height, width):
@@ -72,145 +219,13 @@ def aspect_ratio(height, width):
         2.35: '2.35:1'
     }
     ratio = float(width) / height
-    ratio_name = ratios[min(ratios, key=lambda x:abs(x-ratio))]
+    ratio_name = ratios[min(ratios, key=lambda x: abs(x - ratio))]
     return ratio_name
-
-
-def generate_cinegrid(video, settings):
-    settings.update({
-        'filename': video.get_metadata()['filename'],
-        'basename': os.path.splitext(os.path.basename(video.get_metadata()['filename']))[0],
-        'extension': os.path.splitext(os.path.basename(video.get_metadata()['filename']))[1]
-    })
-    settings['montage_filename'] = '{output}/{basename}-{template}.jpg'.format(**settings)
-
-    if not settings['overwrite'] and os.path.isfile(settings['montage_filename']):
-        print_with_timestamp('Cinegrid exists. Skipping {filename}'.format(**settings))
-        return False
-
-    if settings['start_percent'] is not None and settings['start'] is None:
-        settings['start'] = video.get_metadata()['duration'] * (settings['start_percent'] / 100.0)
-    if settings['end_percent'] is not None and settings['end'] is None:
-        settings['end'] = video.get_metadata()['duration'] * (settings['end_percent'] / 100.0)
-
-    settings['duration'] = settings['end'] - settings['start']
-
-    # Set interval based on duration / number of caps
-    # Otherwise set number of caps based on duration/interval
-    if 'caps' in settings:
-        if settings['caps'] == 'maximum':
-            settings['caps'] = int(
-                settings['max_width'] / (video.get_metadata()['height'] * 200 / video.get_metadata()['width'])
-            ) * settings['columns']
-        settings['interval'] = settings['duration'] / settings['caps']
-    else:
-        settings['caps'] = int(settings['duration'] / settings['interval'])
-
-    settings['rows'] = int(settings['caps'] / settings['columns'])
-
-    settings.update({
-        'max_frame_width': int(settings['max_width'] / settings['columns'])
-    })
-
-    with TemporaryDirectory() as settings['temp']:
-        make_framecaptures(video, settings)
-        make_montage(settings)
-        if settings['header']:
-            add_header(video, settings)
-        resize_montage(settings)
-        print_with_timestamp('Cinegrid completed. Filename: {montage_filename}'.format(**settings))
-
-
-def make_framecaptures(video, settings):
-    print_with_timestamp(
-        'Generating {caps} frame captures for {filename} from {start} for {duration:.2f} seconds'.format(**settings))
-    for i in progressbar.progressbar(range(1, settings['caps']+1)):
-        # Sets capture time. Increases i by 1 so the first frame isn't always black
-        capture_time = settings['start'] + (i * settings['interval'])
-
-        t = datetime.datetime(1, 1, 1) + datetime.timedelta(seconds=capture_time)
-        capture_time_formatted = '{:02}:{:02}:{:02}'.format(t.hour, t.minute, t.second).replace(':', '\\\\:')
-
-        filters = ['showinfo']
-        if settings['timestamp']:
-            filters.append(
-                'drawtext=font={}:text={}:fontsize={}:borderw=5:bordercolor=black:fontcolor=white:x=w-tw-10:y=h-th-10'
-                .format(settings['t_font'], capture_time_formatted, settings['t_fontsize']))
-
-        if video.get_metadata()['width'] > settings['max_frame_width']:
-            filters.append('scale={max_frame_width}:-1'.format(**settings))
-
-        filters = ','.join(filters)
-
-        command = [
-            'ffmpeg',
-            '-ss', str(capture_time),
-            '-i', settings['filename'],
-            '-y',
-            '-vframes', '1',
-            '-vf', filters,
-            '-loglevel', 'fatal',
-            '{}/img{:05d}.jpg'.format(settings['temp'], i)
-        ]
-        subprocess.call(command)
-
-    return None
-
-
-def make_montage(settings):
-    print_with_timestamp('Generating montage')
-
-    command = [
-        'montage',
-        '-background', '{bgcolor}'.format(**settings),
-        '-border', '{border}'.format(**settings),
-        '-bordercolor', '{b_color}'.format(**settings),
-        '-geometry', '+{spacing}+{spacing}'.format(**settings),
-        '-tile', '{columns}x'.format(**settings),
-        '*.jpg',
-        'montage.png'
-    ]
-
-    if settings['shadow']:
-        command.insert(5, '-shadow')
-
-    if 'command_prefix' in settings:
-        command.insert(0, settings['command_prefix'])
-    subprocess.call(command, cwd=settings['temp'])
-
-    return None
 
 
 def print_with_timestamp(string):
     print('[{}] {}'.format(datetime.datetime.strftime(datetime.datetime.now(), '%H:%M:%S'), string))
 
-    return None
-
-
-def resize_montage(settings):
-    print_with_timestamp('Resizing montage to within {max_width}x{max_height}.'.format(**settings))
-    command = [
-        'mogrify',
-        '-resize', '{max_width}x{max_height}>'.format(**settings),
-        'montage.png'
-    ]
-
-    if 'command_prefix' in settings:
-        command.insert(0, settings['command_prefix'])
-    subprocess.call(command, cwd=settings['temp'])
-
-    print_with_timestamp('Compressing montage to {max_filesize}kb.'.format(**settings))
-    command = [
-        'convert',
-        'montage.png',
-        '-define', 'jpeg:extent={max_filesize}kb'.format(**settings),
-        'montage.jpg'.format(**settings)
-    ]
-
-    if 'command_prefix' in settings:
-        command.insert(0, settings['command_prefix'])
-    subprocess.call(command, cwd=settings['temp'])
-    shutil.move('{}/montage.jpg'.format(settings['temp']), settings['montage_filename'])
     return None
 
 
@@ -317,7 +332,7 @@ def main():
     parser.add_argument('--start_percent', help='start point (percent) for frame captures (default: %(default)s)',
                         default=0, metavar='START', type=float),
     parser.add_argument('--template', help='configuration template [{}] (default: %(default)s)'.format(
-                        ', '.join(sorted(template.keys()))),
+        ', '.join(sorted(templates.keys()))),
                         default='3x3')
     parser.add_argument('--t_font', help='timestamp font (default: %(default)s)',
                         default=settings['t_font'], metavar='FONT'),
@@ -327,12 +342,13 @@ def main():
                         default=False, action='store_true'),
     parser.add_argument('--version', action='version', version='%(prog)s 1.0alpha')
     settings.update(parser.parse_args().__dict__)
-    settings.update(template[settings['template']])
+    settings.update(templates[settings['template']])
     settings['output'] = os.path.expanduser(settings['output'])
 
     for filename in settings['FILE']:
         v = Video(filename)
-        generate_cinegrid(v, settings)
+        grid = Cinegrid(v, settings)
+        grid.generate()
     if settings['prompt']:
         input('Press Enter to continue.')
 
