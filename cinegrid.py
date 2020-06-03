@@ -57,8 +57,9 @@ class Cinegrid:
             if self.settings['timestamp']:
                 filters.append(
                     'drawtext=font={}:text={}:fontsize={}:borderw=5:'
-                    'bordercolor=black:fontcolor=white:x=w-tw-10:y=h-th-10 '
-                        .format(self.settings['t_font'], capture_time_formatted, self.settings['t_fontsize']))
+                    'bordercolor=black:fontcolor=white:x=w-tw-10:y=h-th-10 '.format(
+                        self.settings['t_font'], capture_time_formatted, self.settings['t_fontsize'])
+                    )
 
             if self.video.get_metadata()['width'] > self.settings['max_frame_width']:
                 filters.append('scale={max_frame_width}:-1'.format(**self.settings))
