@@ -1,9 +1,9 @@
 # cinegrid
 Python script to create mosaics from video files, utilizing ffmpeg and imagemagick. 
 
-usage:
-```commandline
-cinegrid.py [-h] [--bgcolor COLOR] [--border PIXELS] [--b_color COLOR]  
+#### Usage
+```shell
+python cinegrid.py [-h] [--bgcolor COLOR] [--border PIXELS] [--b_color COLOR]  
                    [--caps CAPS] [--columns COLUMNS] [--end END]  
                    [--end_percent END] [--h_fontsize PIXELS] [--header]  
                    [--interval INTERVAL] [--max_filesize KB]  
