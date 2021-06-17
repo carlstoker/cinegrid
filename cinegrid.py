@@ -3,10 +3,10 @@ import argparse
 import datetime
 import json
 import os
-import progressbar
 import shutil
 import subprocess
 from tempfile import TemporaryDirectory
+import progressbar
 
 templates = {
     '3x3': {'caps': 9, 'columns': 3},
@@ -42,13 +42,17 @@ class Cinegrid:
     def get_montage_filename(self):
         return '{output}/{basename}-{template}.jpg'.format(**self.settings)
 
+    def print_status(self):
+        template = 'Generating {caps} frame captures for {filename} from {start} for {duration:.2f} seconds'
+        print_with_timestamp(template.format(**self.settings))
+
     def extract_frames(self):
-        print_with_timestamp(
-            'Generating {caps} frame captures for {filename} from {start} for {duration:.2f} seconds'.format(
-                **self.settings))
+        self.print_status()
         for i in progressbar.progressbar(range(1, self.settings['caps'] + 1)):
             # Sets capture time. Increases i by 1 so the first frame isn't always black
             capture_time = self.settings['start'] + (i * self.settings['interval'])
+
+            capture_time_formatted = formatted_duration(capture_time)
 
             t = datetime.datetime(1, 1, 1) + datetime.timedelta(seconds=capture_time)
             capture_time_formatted = '{:02}:{:02}:{:02}'.format(t.hour, t.minute, t.second).replace(':', '\\\\:')
@@ -78,8 +82,6 @@ class Cinegrid:
             ]
             subprocess.call(command)
 
-        return None
-
     def generate(self):
         self.settings.update({
             'filename': self.get_filename(),
@@ -89,8 +91,7 @@ class Cinegrid:
         self.settings['montage_filename'] = '{output}/{basename}-{template}.jpg'.format(**self.settings)
 
         if self.settings['overwrite'] is False and os.path.isfile(self.get_montage_filename()):
-            print_with_timestamp('Cinegrid exists. Skipping {}'.format(self.get_filename()))
-            return False
+            raise FileExistsError('Cinegrid exists. Skipping {}'.format(self.get_filename()))
 
         if self.settings['start_percent'] is not None and self.settings['start'] is None:
             self.settings['start'] = self.video.get_metadata()['duration'] * (self.settings['start_percent'] / 100.0)
@@ -146,13 +147,10 @@ class Cinegrid:
             command.insert(0, self.settings['command_prefix'])
         subprocess.call(command, cwd=self.settings['temp'])
 
-        return None
-
     def add_header(self):
         print_with_timestamp('Adding header to montage.')
 
-        t = datetime.datetime(1, 1, 1) + datetime.timedelta(seconds=(self.video.get_metadata()['duration']))
-        duration_formatted = '{:02}:{:02}:{:02}'.format(t.hour, t.minute, t.second)
+        duration_formatted = formatted_duration(self.video.get_metadata()['duration'])
 
         label = [
             'File Name: {basename}{extension}'.format(**self.settings),
@@ -176,8 +174,6 @@ class Cinegrid:
         if 'command_prefix' in self.settings:
             command.insert(0, self.settings['command_prefix'])
         subprocess.call(command, cwd=self.settings['temp'])
-
-        return None
 
     def resize_montage(self):
         print_with_timestamp('Resizing montage to within {max_width}x{max_height}.'.format(**self.settings))
@@ -203,8 +199,6 @@ class Cinegrid:
             command.insert(0, self.settings['command_prefix'])
         subprocess.call(command, cwd=self.settings['temp'])
         shutil.move('{}/montage.jpg'.format(self.settings['temp']), self.settings['montage_filename'])
-        return None
-
 
 def aspect_ratio(height, width):
     ratios = {
@@ -224,10 +218,13 @@ def aspect_ratio(height, width):
     return ratio_name
 
 
+def formatted_duration(offset):
+    time_obj = datetime.datetime(1, 1, 1) + datetime.timedelta(seconds=offset)
+    return '{:02}:{:02}:{:02}'.format(time_obj.hour, time_obj.minute, time_obj.second).replace(':', '\\:')
+
+
 def print_with_timestamp(string):
     print('[{}] {}'.format(datetime.datetime.strftime(datetime.datetime.now(), '%H:%M:%S'), string))
-
-    return None
 
 
 def sizeof_fmt(num, suffix='B'):
@@ -260,9 +257,9 @@ class Video:
         j = json.loads(subprocess.check_output(command))
 
         for key in ['height', 'width', 'duration']:
-            for d in j['streams']:
-                if key in d:
-                    self.__metadata[key] = d[key]
+            for dur in j['streams']:
+                if key in dur:
+                    self.__metadata[key] = dur[key]
                     break
 
         if 'duration' not in self.__metadata:
@@ -274,8 +271,6 @@ class Video:
             'filesize_human': sizeof_fmt(os.path.getsize(filename)),
             'aspect_ratio': aspect_ratio(self.__metadata['height'], self.__metadata['width'])
         })
-
-        return None
 
 
 def main():
@@ -293,54 +288,54 @@ def main():
     parser = argparse.ArgumentParser(description='Generate cinegrid for the FILEs')
     parser.add_argument('FILE', nargs='+')
     parser.add_argument('--bgcolor', help='background color (default: %(default)s)',
-                        default='#EAEAEA', metavar='COLOR'),
+                        default='#EAEAEA', metavar='COLOR')
     parser.add_argument('--border', help='border thickness in pixels (default: %(default)s)',
-                        default=0, metavar='PIXELS', type=int),
+                        default=0, metavar='PIXELS', type=int)
     parser.add_argument('--b_color', help='border color (default: %(default)s)',
-                        default='black', metavar='COLOR'),
+                        default='black', metavar='COLOR')
     parser.add_argument('--caps', help='number of frame captures (default: %(default)s)',
-                        default=9, type=int),
+                        default=9, type=int)
     parser.add_argument('--columns', help='number of columns (default: %(default)s)',
-                        default=3, type=int),
+                        default=3, type=int)
     parser.add_argument('--end', help='end point (in seconds) for frame captures (default: %(default)s)',
-                        default=None, metavar='END', type=float),
+                        default=None, metavar='END', type=float)
     parser.add_argument('--end_percent', help='end point (percent) for frame captures (default: %(default)s)',
-                        default=90, metavar='END', type=float),
+                        default=90, metavar='END', type=float)
     parser.add_argument('--h_fontsize', help=' (default: %(default)s)',
                         default=32, metavar='PIXELS', type=int)
     parser.add_argument('--header', help='toggles display of header (default: %(default)s)',
-                        default=False, action='store_true'),
+                        default=False, action='store_true')
     parser.add_argument('--interval', help='interval between captures (default: %(default)s)',
                         default=30, type=int)
     parser.add_argument('--max_filesize', help='maximum filesize in kilobytes (default: %(default)skb)',
-                        default=3072, metavar='KB', type=float),
+                        default=3072, metavar='KB', type=float)
     parser.add_argument('--max_height', help='maximum height in pixels (default: %(default)s)',
-                        default=5000, metavar='PIXELS', type=int),
+                        default=5000, metavar='PIXELS', type=int)
     parser.add_argument('--max_width', help='maximum width in pixels (default: %(default)s)',
-                        default=5000, metavar='PIXELS', type=int),
+                        default=5000, metavar='PIXELS', type=int)
     parser.add_argument('--output', help='output directory (default: %(default)s)',
                         default='~/Pictures', metavar='DIR')
     parser.add_argument('--overwrite', help='overwrite existing cinegrid (default: %(default)s)',
                         default=False, action='store_true')
     parser.add_argument('--prompt', help='prompt before exiting (default: %(default)s)',
-                        default=False, action='store_true'),
+                        default=False, action='store_true')
     parser.add_argument('--shadow', help='render shadow around captures (default: %(default)s)',
-                        default=False, action='store_true'),
+                        default=False, action='store_true')
     parser.add_argument('--spacing', help='spacing between frames (default: %(default)s)',
-                        default=0, type=int),
+                        default=0, type=int)
     parser.add_argument('--start', help='start point (in seconds) for frame captures (default: %(default)s)',
-                        default=None, metavar='START', type=float),
+                        default=None, metavar='START', type=float)
     parser.add_argument('--start_percent', help='start point (percent) for frame captures (default: %(default)s)',
-                        default=0, metavar='START', type=float),
+                        default=0, metavar='START', type=float)
     parser.add_argument('--template', help='configuration template [{}] (default: %(default)s)'.format(
         ', '.join(sorted(templates.keys()))),
                         default='3x3')
     parser.add_argument('--t_font', help='timestamp font (default: %(default)s)',
-                        default=settings['t_font'], metavar='FONT'),
+                        default=settings['t_font'], metavar='FONT')
     parser.add_argument('--t_fontsize', help='timestamp fontsize (default: %(default)s)',
-                        default=64, metavar='PIXELS', type=int),
+                        default=64, metavar='PIXELS', type=int)
     parser.add_argument('--timestamp', help='toggles display of timestamps on captures (default: %(default)s)',
-                        default=False, action='store_true'),
+                        default=False, action='store_true')
     parser.add_argument('--version', action='version', version='%(prog)s 1.0alpha')
     settings.update(parser.parse_args().__dict__)
     settings.update(templates[settings['template']])
@@ -350,9 +345,13 @@ def main():
         if os.path.exists(filename) is False:
             print('File does not exist: {}'.format(filename))
             continue
-        v = Video(filename)
-        grid = Cinegrid(v, settings)
-        grid.generate()
+        vid = Video(filename)
+        grid = Cinegrid(vid, settings)
+        try:
+            grid.generate()
+        except FileExistsError as e:
+            print_with_timestamp(e)
+
     if settings['prompt']:
         input('Press Enter to continue.')
 
