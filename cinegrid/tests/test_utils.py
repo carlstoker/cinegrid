@@ -41,7 +41,7 @@ def test_cleanup_metadata():
 
     assert clean_metadata['filename'] == filename
     assert clean_metadata['basename'] == 'sintel_trailer-480p'
-    assert clean_metadata['extention'] == '.mp4'
+    assert clean_metadata['extension'] == '.mp4'
 
     assert clean_metadata['height'] == 480
     assert clean_metadata['width'] == 854
