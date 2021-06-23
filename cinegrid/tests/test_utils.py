@@ -73,10 +73,10 @@ def test_cleanup_metadata():
 
 
 def test_formatted_duration():
-    assert core.utils.formatted_duration(duration = 0) == '00\\:00\\:00'
-    assert core.utils.formatted_duration(duration = 60) == '00\\:01\\:00'
-    assert core.utils.formatted_duration(duration = 3600) == '01\\:00\\:00'
-    assert core.utils.formatted_duration(duration = 7200) == '02\\:00\\:00'
+    assert core.utils.formatted_duration(duration=0) == '00\\:00\\:00'
+    assert core.utils.formatted_duration(duration=60) == '00\\:01\\:00'
+    assert core.utils.formatted_duration(duration=3600) == '01\\:00\\:00'
+    assert core.utils.formatted_duration(duration=7200) == '02\\:00\\:00'
 
 
 def test_print_with_timestamp(capsys):

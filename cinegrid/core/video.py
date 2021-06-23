@@ -1,5 +1,6 @@
 import core.utils as utils
 
+
 class Video:
     def __init__(self, filename):
         raw_metadata = utils.get_file_metadata(filename)

@@ -4,6 +4,7 @@ import math
 import os
 import subprocess
 
+
 def get_file_metadata(filename):
     command = [
         'ffprobe',
@@ -17,7 +18,7 @@ def get_file_metadata(filename):
 
 def cleanup_metadata(filename, metadata):
     clean_metadata = {'filename': filename}
-    
+
     for key in ['height', 'width', 'duration']:
         for dur in metadata['streams']:
             if key in dur:
@@ -38,6 +39,7 @@ def cleanup_metadata(filename, metadata):
 
     return clean_metadata
 
+
 def sizeof_fmt(num):
     suffixes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB']
 
@@ -54,6 +56,7 @@ def sizeof_fmt(num):
     suffix = suffixes[power]
 
     return '{0:.1f} {1}'.format(value, suffix)
+
 
 def aspect_ratio(width, height):
     ratios = {
@@ -73,10 +76,11 @@ def aspect_ratio(width, height):
     ratio_name = ratios[min(ratios, key=lambda x: abs(x - ratio))]
     return ratio_name
 
+
 def formatted_duration(duration):
     time_obj = datetime.datetime(1, 1, 1) + datetime.timedelta(seconds=duration)
     return '{:02}:{:02}:{:02}'.format(time_obj.hour, time_obj.minute, time_obj.second).replace(':', '\\:')
 
 
-def print_with_timestamp(string, base_time = datetime.datetime.now()):
+def print_with_timestamp(string, base_time=datetime.datetime.now()):
     print('[{}] {}'.format(datetime.datetime.strftime(base_time, '%H:%M:%S'), string))
