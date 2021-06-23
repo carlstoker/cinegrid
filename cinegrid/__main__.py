@@ -21,6 +21,7 @@ templates = {
     }
 }
 
+
 def main():
     # OS specific workaround
     if os.name == 'nt':
@@ -31,7 +32,6 @@ def main():
         settings = {
             't_font': '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
         }
-
 
     parser = create_parser(settings)
     settings.update(parser.parse_args().__dict__)
@@ -51,6 +51,7 @@ def main():
 
     if settings['prompt']:
         input('Press Enter to continue.')
+
 
 def create_parser(settings):
     parser = argparse.ArgumentParser(description='Generate cinegrid for the FILEs')
