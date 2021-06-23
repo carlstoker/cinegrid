@@ -33,7 +33,7 @@ def cleanup_metadata(filename, metadata):
         'filesize_human': sizeof_fmt(os.path.getsize(clean_metadata['filename'])),
         'aspect_ratio': aspect_ratio(clean_metadata['width'], clean_metadata['height']),
         'basename': os.path.splitext(os.path.basename(filename))[0],
-        'extention': os.path.splitext(os.path.basename(filename))[1]
+        'extension': os.path.splitext(os.path.basename(filename))[1]
     })
 
     return clean_metadata
@@ -49,7 +49,6 @@ def sizeof_fmt(num):
     if power > (len(suffixes) - 1):
         power = len(suffixes) - 1
 
-    print("dividing {} by {}".format(num, 1024**power))
     value = num / (1024 ** power)
 
     suffix = suffixes[power]
@@ -70,7 +69,6 @@ def aspect_ratio(width, height):
         2.35: '2.35:1'
     }
     ratio = float(width) / height
-    print(width, height, ratio)
 
     ratio_name = ratios[min(ratios, key=lambda x: abs(x - ratio))]
     return ratio_name
