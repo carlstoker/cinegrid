@@ -8,7 +8,7 @@ def test_get_metadata():
 
     assert video.get_metadata()['filename'] == filename
     assert video.get_metadata()['basename'] == 'sintel_trailer-480p'
-    assert video.get_metadata()['extention'] == '.mp4'
+    assert video.get_metadata()['extension'] == '.mp4'
 
     assert video.get_metadata()['height'] == 480
     assert video.get_metadata()['width'] == 854
