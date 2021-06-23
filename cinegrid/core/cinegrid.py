@@ -6,11 +6,11 @@ import subprocess
 from tempfile import TemporaryDirectory
 import core.utils as utils
 
+
 class Cinegrid:
-    def __init__(self, video, settings):  
+    def __init__(self, video, settings):
         self.video = video
         self.settings = settings
-
 
     def generate(self):
         self.update_settings()
@@ -113,7 +113,6 @@ class Cinegrid:
         if 'command_prefix' in self.settings:
             command.insert(0, self.settings['command_prefix'])
 
-        
         subprocess.call(command, cwd=self.settings['temp'])
 
         if self.settings['header']:

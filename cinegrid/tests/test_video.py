@@ -1,6 +1,7 @@
 import core.video
 import os
 
+
 def test_get_metadata():
     filename = os.getcwd() + '\\tests\\sintel_trailer-480p.mp4'
 
